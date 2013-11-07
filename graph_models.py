@@ -17,9 +17,17 @@ from sample_utils import *
 #from elliptical_slice import *
 #from hmc import *
 
-BUG = False
-BUG2 = False
-BUG3 = False
+__BUG1__ = False
+__BUG2__ = False
+__BUG3__ = False
+
+def set_bugs(bug1=False,bug2=False,bug3=False):
+    global __BUG1__
+    global __BUG2__
+    global __BUG3__
+    __BUG1__=bug1
+    __BUG2__=bug2
+    __BUG3__=bug3
 
 class AldousHooverNetwork:
     """
@@ -266,7 +274,7 @@ class StochasticBlockModel(AldousHooverNetwork):
         # Compute the posterior distribution over blocks
         ln_pi_post = np.log(pi)
         
-        if BUG3:
+        if __BUG3__:
             rrange = np.arange(1,self.R)
         else:
             rrange = np.arange(self.R)        
@@ -292,7 +300,7 @@ class StochasticBlockModel(AldousHooverNetwork):
             if np.any(i2):
                 ln_pi_post[r] += np.sum(np.log(1-B[np.ix_(zother[i2],[r])]))
             
-        if BUG2:
+        if __BUG2__:
             # Introduce numerical error by not using log sum exp sampling
             # This, unfortunately, doesn't seem to make much difference.
             # Perhaps it would if the network were larger and numerical 
@@ -372,7 +380,7 @@ class StochasticBlockModel(AldousHooverNetwork):
                         b0post += np.sum(1-Ar1r2)
                         b1post += np.sum(Ar1r2)
                     
-                    if BUG:
+                    if __BUG1__:
                         # Introduce an artificial bug that should be caught 
                         # by Geweke validation. Swap the order of the input
                         # parameters
@@ -503,287 +511,3 @@ def geweke_test(N, model, N_iter=1000, callback=None, pause=False):
             raw_input("Press enter to continue.")
     
     return (f_trace, theta_trace, lp_trace)
-
-#class LatentDistanceModel(LogisticGraphModelExtension):
-#    """
-#    Prior for a latent distance model of connectivity. Each process is given 
-#    a location in some latent space, and the probability of connectivity is 
-#    exponentially decreasing with distance between two processes. 
-#    """
-#    def __init__(self, baseModel, configFile):
-#        super(LatentDistanceModel,self).__init__(baseModel, configFile)
-#        
-#        self.parseConfigurationFile(configFile)
-#        pprintDict(self.params, "Graph Model Params")
-#        
-#        self.params["registered"] = False 
-#        
-#    def parseConfigurationFile(self, configFile):
-#        
-#        # Set defaults
-#        defaultParams = {}
-#        defaultParams["thin"] = 50
-#        
-#        # Parse config file
-#        cfgParser = ConfigParser(defaultParams)
-#        cfgParser.read(configFile)
-#        
-#        distparams = {}
-#        distparams["location_name"] = cfgParser.get("graph_model", "location")
-#        distparams["mu_theta"] = cfgParser.getfloat("graph_model", "mu_theta")
-#        distparams["sig_theta"] = cfgParser.getfloat("graph_model", "sig_theta")
-#        distparams["thin"] = cfgParser.getint("graph_model", "thin")
-#        
-#        # Combine the two param dicts
-#        self.params.update(distparams)
-#        
-#    def initializeModelParamsFromPrior(self):
-#        self.register_providers()
-#        
-#        self.initializeGpuMemory()
-#        
-#        K = self.modelParams["proc_id_model","K"]
-#        
-#        # Initialize tau with draw from exponential prior
-#        self.modelParams["graph_model", "tau"] = np.exp(np.random.normal(self.params["mu_theta"],
-#                                                                         self.params["sig_theta"]))
-#        
-#        # Initialize the pairwise distance matrix
-#        self.computeDistanceMatrix()
-#        
-#        # Override the base model's default adjacency matrix with a draw from the prior
-#        self.modelParams["graph_model","A"] = self.sampleGraphFromPrior()
-#        self.gpuPtrs["graph_model","A"].set(self.modelParams["graph_model","A"])
-#        
-#        self.iter = 0
-#    
-#    def initializeModelParamsFromDict(self, paramsDB):
-#        self.register_providers()
-#        self.initializeGpuMemory()
-#        self.modelParams["graph_model","A"] = paramsDB["graph_model","A"]
-#        self.gpuPtrs["graph_model","A"].set(self.modelParams["graph_model","A"])
-#        
-#        if ("graph_model","tau") in paramsDB:
-#            self.modelParams["graph_model", "tau"] = np.float(paramsDB["graph_model","tau"])
-#        else:
-#            # Initialize tau with draw from exponential prior
-#            self.modelParams["graph_model", "tau"] = np.exp(np.random.normal(self.params["mu_theta"],
-#                                                                             self.params["sig_theta"]))
-#        
-#        self.computeDistanceMatrix()
-#        
-#    def register_providers(self):
-#        """
-#        Register the cluster and location providers.
-#        """
-#        if self.params["registered"]:
-#            return
-#        
-#        # Now find the correct location model
-#        location = None
-#        location_name = self.params["location_name"]
-#        location_list = self.base.extensions["location_model"]
-#        location_list = location_list if isinstance(location_list, type([])) else [location_list]
-#        for location_model in location_list:
-#            if location_model.name == location_name:
-#                # Found the location model!
-#                location = location_model
-#        if location is None:
-#            raise Exception("Failed to find location model '%s' in extensions!" % location_name)
-#            
-#        self.params["location"] = location
-#        
-#        # Add the location callback
-#        self.params["location"].register_consumer(self.compute_log_lkhd_new_location)
-#        
-#        self.params["registered"] = True
-#    
-#    
-#    def computeDistanceMatrix(self):
-#        """
-#        compute the pairwise distances between each process
-#        """
-#        K = self.modelParams["proc_id_model","K"]
-#        L = self.modelParams[self.params["location"].name, "L"]
-#        
-#        dist = np.zeros((K,K))
-#        for i in np.arange(K):
-#            for j in np.arange(i+1,K):
-#                d_ij = np.linalg.norm(L[i,:]-L[j,:], 2)
-#                dist[i,j] = d_ij
-#                dist[j,i] = d_ij
-#                
-#        self.modelParams["graph_model", "dist"] = dist
-#    
-#    def getConditionalEdgePr(self, ki, kj):
-#        """
-#        Return the conditional probability of edge A[ki,kj] given the model
-#        parameters.  
-#        """
-#        if not self.params["allow_self_excitation"] and ki==kj:
-#            return 0.0
-#        
-#        else:
-#            return np.exp(-1/self.modelParams["graph_model","tau"]*self.modelParams["graph_model","dist"][ki,kj])
-#    
-#    def sampleModelParameters(self):
-#        """
-#        Sample process locations and edges in adjacency matrix
-#        """
-#        self.computeDistanceMatrix()
-#        if np.mod(self.iter, self.params["thin"]) == 0:
-#            self.sampleTau()
-#        
-#        # Sample a new graph on every iteration
-#        self.sampleA()
-#        
-#        self.iter += 1
-#    
-#    def sampleTau(self):
-#        """
-#        Sample tau using Hybrid Monte Carlo. The log likelihood is a function of the 
-#        current graph and the distances between connected and disconnected nodes.
-#        """
-#        # Set HMC params
-#        epsilon = 0.001
-#        n_steps = 10
-#        
-#        # By convention hmc minimizes the negative log likelihood,
-#        # so negate the logprob and gradient calculations
-#        theta_new = hmc(lambda t: -1.0*self.computeLogProbTau(t), 
-#                        lambda t: -1.0*self.computeGradLogProbTau(t), 
-#                        epsilon,
-#                        n_steps,
-#                        np.log(self.modelParams["graph_model", "tau"]))
-#        
-#        tau_new = np.exp(theta_new)
-#        
-#        self.modelParams["graph_model","tau"] = tau_new
-#    
-#    def computeLogProbTau(self, theta):
-#        """
-#        Compute the log likelihood of the current graph given theta = log(tau)
-#        """
-#        tau = np.exp(theta)
-#        
-#        K = self.modelParams["proc_id_model", "K"]
-#        
-#        # Get the distances between connected neurons and bw disconnected neurons
-#        # Ignore the diagonal since the distances are equal to zero
-#        dist_conn = self.modelParams["graph_model", "dist"][self.modelParams["graph_model", "A"]]
-#        dist_conn = dist_conn[dist_conn>0]
-#        N_conn = np.size(dist_conn)
-#        dist_noconn = self.modelParams["graph_model", "dist"][np.bitwise_not(self.modelParams["graph_model", "A"])]
-#        dist_noconn = dist_noconn[dist_noconn>0]
-#        N_noconn = np.size(dist_noconn)
-#        
-#        # Compute the logprob
-#        lpr = 0.0
-#        if N_conn > 0:
-#            lpr += -1.0*np.sum(dist_conn)/tau
-#        if N_noconn > 0:
-#            lpr += np.sum(np.log(1-np.exp(-dist_noconn/tau))) 
-#        
-#        # Contribution from prior
-#        lpr += -0.5*(theta - self.params["mu_theta"])**2/self.params["sig_theta"]**2
-#        
-#        return lpr
-#    
-#    def computeGradLogProbTau(self, theta):
-#        """
-#        Compute the gradient of the log likelihood wrt theta = log(tau)
-#        """
-#        tau = np.exp(theta)
-#        K = self.modelParams["proc_id_model", "K"]
-#        
-#        # Get the distances between connected neurons and bw disconnected neurons
-#        dist_conn = self.modelParams["graph_model", "dist"][self.modelParams["graph_model", "A"]]
-#        dist_conn = dist_conn[dist_conn>0]
-##        N_conn = np.size(dist_conn)
-#        dist_noconn = self.modelParams["graph_model", "dist"][np.bitwise_not(self.modelParams["graph_model", "A"])]
-#        dist_noconn = dist_noconn[dist_noconn>0]
-##        N_noconn = K**2- N_conn
-#        
-#        grad_lpr = 0.0
-#        grad_lpr += np.sum(dist_conn)/(tau**2) 
-#        
-#        try:
-#            grad_lpr += np.sum(-dist_noconn/(tau**2)*np.exp(-dist_noconn/tau)/(1-np.exp(-dist_noconn/tau)))
-#        except Exception as e:
-#            # Catch FloatingPointErrors
-#            log.error("Caught FloatingPointError (underflow?) in GradLogProbTau")
-#            log.info(dist_noconn)
-#            log.info(tau)
-#            
-#        # The above derivative is with respect to tau. Multiply by dtau/dtheta
-#        grad_lpr *= np.exp(theta)
-#        
-#        # Add the gradient of the prior over theta
-#        grad_lpr += -(theta-self.params["mu_theta"])/(self.params["sig_theta"]**2)
-#        
-#        return grad_lpr
-#        
-#    def compute_log_lkhd_new_location(self, k, Lk):
-#        """
-#        Compute the log likelihood of A given X[k,:] = x 
-#        This affects edges into and out of process k
-#        """
-#        A = self.modelParams["graph_model", "A"]
-#        K = self.modelParams["proc_id_model","K"]
-#        L = self.modelParams[self.params["location"].name, "L"]
-#        tau = self.modelParams["graph_model","tau"]
-#        
-#        # Compute the updated distance vector from k to other nodes
-#        dist_k = np.zeros((K,))
-#        for j in np.arange(K):
-#            if j != k:
-#                dist_k[j] = np.linalg.norm(Lk-L[j,:], 2)
-#        
-#        # Compute the log likelihood
-#        try:
-#            ll = 0
-#            for j in np.arange(K):
-#                if j != k:
-#                    ll += (A[j,k]+A[k,j])*(-1/tau*dist_k[j])
-#                    
-#                    if dist_k[j] == 0:
-#                        # If the distance is zero then there must be an edge
-#                        if not A[j,k] or not A[k,j]:
-#                            ll = -np.Inf
-#                    else:   
-#                        ll += (2-A[j,k]-A[k,j])*np.log(1-np.exp(-1/tau*dist_k[j]))
-#                    
-#        except Exception as e:
-#            log.info("compute_lkhd_(%d,%s)", k, str(Lk))
-#            log.info("L")
-#            log.info(L)
-#            log.info("dist")     
-#            log.info(dist_k)
-#            log.info("tau: %f", tau)
-#            raise e
-#        return ll
-#    
-#    def sampleGraphFromPrior(self):
-#        """
-#        Sample a graph from the prior, assuming model params have been set.
-#        """
-#        K = self.modelParams["proc_id_model","K"]
-#        dist = self.modelParams["graph_model","dist"]
-#        tau = self.modelParams["graph_model","tau"]
-#        
-#        A = np.random.rand(K, K) < np.exp(-1/tau*dist)
-#        return A
-#    
-#    def registerStatManager(self, statManager):
-#        """
-#        Register callbacks with the given StatManager
-#        """
-#        super(LatentDistanceModel,self).registerStatManager(statManager)
-#        
-#        K = self.modelParams["proc_id_model","K"]
-#        
-#        statManager.registerSampleCallback("A_tau", 
-#                                           lambda: self.modelParams["graph_model","tau"],
-#                                           (1,),
-#                                           np.float32)
-#        

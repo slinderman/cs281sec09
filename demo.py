@@ -4,48 +4,91 @@ import scipy
 import scipy.special
 import numpy as np
 
-def erdos_renyi_test():
+def sample_er():
     """
     Test the generation and fitting of an Erdos Renyi model
     """
     N = 100
-    a0 = 1.0
-    b0 = 1.0
+    a0 = 0.75
+    b0 = 0.75
     model = ErdosRenyiNetwork(rho=None, x=(a0,b0))
     
-    (A,f,theta) = sample_network(model,N)
-    
     plt.figure()
-    plt.spy(A)
-    plt.title("Erdos-Renyi (rho=%.3f"%theta)
+    
+    for ex in np.arange(3):
+        plt.subplot(1,3,ex+1)
+        (A,f,theta) = sample_network(model,N)
+        plt.spy(A)
+        plt.title("ER (rho=%.3f)" % theta)
     plt.show()
     
-    N_iter = 400
-    (f_trace, theta_trace, lp_trace) = fit_network(A, model, N_iter=N_iter)
+#    N_iter = 400
+#    (f_trace, theta_trace, lp_trace) = fit_network(A, model, N_iter=N_iter)
+#        
+#    plt.figure()
+#    plt.subplot(2,1,1)
+#    plt.plot(np.arange(N_iter), np.array(lp_trace))
+#    plt.ylabel("log pr")
+#    plt.title("log probability")
+#    
+#    plt.subplot(2,1,2)
+#    plt.plot(np.arange(N_iter), np.array(theta_trace))
+#    plt.hold(True)
+#    plt.plot(np.arange(N_iter), theta*np.ones(N_iter))
+#    plt.ylabel("\\theta")
+#    plt.ylim(0,1)
+#    plt.xlabel("Iteration")
+#    plt.title("rho")
+#    plt.show()
+
+def sample_sbm():
+    """
+    Test the generation and fitting of an Erdos Renyi model
+    """
+    N = 100
+    R = 5
+    b1 = 0.5
+    b0 = 0.5
+    a  = 0.75
+    alpha0 = a*np.ones(R)
+    model = StochasticBlockModel(R, b0, b1, alpha0)
+    
+    def invariant_order(f):
+        """
+        Return an (almost) invariant ordering of the block labels 
+        """
+        # Cast features to block IDs
+        z = np.array(f).astype(np.int)
+        # Create a copy
+        zc = np.copy(z)
+        # Sort block IDs according to block size
+        M = np.zeros(R)
+        for r in np.arange(R):
+            M[r] = np.sum(z==r)
+        # Sort by size to get new IDs
+        newz = np.argsort(M)
+        # Update labels in zc
+        for r in np.arange(R):
+            zc[z==newz[r]]=r
+        return np.argsort(-zc)
         
+    # Generate a test network or use a given network
     plt.figure()
-    plt.subplot(2,1,1)
-    plt.plot(np.arange(N_iter), np.array(lp_trace))
-    plt.ylabel("log pr")
-    plt.title("log probability")
-    
-    plt.subplot(2,1,2)
-    plt.plot(np.arange(N_iter), np.array(theta_trace))
-    plt.hold(True)
-    plt.plot(np.arange(N_iter), theta*np.ones(N_iter))
-    plt.ylabel("\\theta")
-    plt.ylim(0,1)
-    plt.xlabel("Iteration")
-    plt.title("rho")
+    for ex in np.arange(3):
+        (A,f,theta) = sample_network(model,N)    
+        zs = invariant_order(f)
+        plt.subplot(1,3,ex-1)
+        plt.spy(A[np.ix_(zs,zs)])
+        plt.title("SBM")
     plt.show()
-    
-def sbm_test((A,f)=(None,None)):
+
+def gibbs_sbm((A,f)=(None,None)):
     """
     Test the generation and fitting of an Erdos Renyi model
     """
     R = 5
-    b1 = 1
-    b0 = 1
+    b1 = 0.5
+    b0 = 0.5
     a  = 1
     alpha0 = a*np.ones(R)
     model = StochasticBlockModel(R, b0, b1, alpha0)
@@ -105,8 +148,8 @@ def sbm_test((A,f)=(None,None)):
      
 
     # Run the Gibbs sampler
-    N_restarts = 10
-    N_iter = 100
+    N_restarts = 1
+    N_iter = 50
     plt.figure()
     for restart in np.arange(N_restarts):
         print "Restart %d" % restart
@@ -123,7 +166,7 @@ def sbm_test((A,f)=(None,None)):
     plt.title("Log probability for multiple Markov chains")
     plt.show()
 
-def geweke_sbm_test(bugs=0):
+def geweke_sbm_test(bug1=False,bug2=False,bug3=False):
     """
     Test our Gibbs sampler using Geweke validation
     """
@@ -136,12 +179,7 @@ def geweke_sbm_test(bugs=0):
     model = StochasticBlockModel(R, b0, b1, alpha0)
     
     # Program some bugs into the graph model
-    if bugs == 1:
-        BUG1 = True
-    if bugs == 2:
-        BUG2 = True
-    if bugs == 3:
-        BUG3 = True
+    set_bugs(bug1,bug2,bug3)
     
     def invariant_order(f):
         """
@@ -236,9 +274,7 @@ def geweke_sbm_test(bugs=0):
     raw_input("Press enter to quit.")
     
     # Reset bugs
-    BUG1 = False
-    BUG2 = False
-    BUG3 = False
+    set_bugs(False,False,False)
     
 def load_data(fname):
     """
@@ -249,6 +285,15 @@ def load_data(fname):
     return dat
 
 if __name__ == "__main__":
-#     erdos_renyi_test()
-    sbm_test()
-#     geweke_sbm_test()
+    raw_input("Press enter to sample ER networks.")
+    sample_er()
+    raw_input("Press enter to sample SBM networks.")
+    sample_sbm()
+    raw_input("Press enter to fit SBM parameters with Gibbs sampling.")
+    gibbs_sbm()
+    raw_input("Press enter to perform Geweke validation on SBM Gibbs sampler.")
+    geweke_sbm_test()
+    raw_input("Press enter to perform Geweke validation on SBM Gibbs sampler with a bug.")
+    geweke_sbm_test(bug1=True)
+    raw_input("Press enter to perform Geweke validation on SBM Gibbs sampler with another bug.")
+    geweke_sbm_test(bug3=True)
